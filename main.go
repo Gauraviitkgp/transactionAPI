@@ -1,6 +1,7 @@
 package main
 
 import (
+	"PBL_Proj/database"
 	"PBL_Proj/models"
 	"encoding/json"
 	"fmt"
@@ -19,11 +20,13 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func returnAllTransactions(w http.ResponseWriter, r *http.Request) {
+	database.DbClient.GetData()
 	fmt.Println("Endpoint Hit: returnAllTransactions")
 	json.NewEncoder(w).Encode(models.Transactions)
 }
 
 func returnParticularTransaction(w http.ResponseWriter, r *http.Request) {
+	database.DbClient.GetData()
 	vars := mux.Vars(r)
 	key := vars["id"]
 	uintKey, _ := strconv.ParseUint(key, 10, 32)
@@ -36,6 +39,7 @@ func returnParticularTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 func returnTransactionsOfParticularAccount(w http.ResponseWriter, r *http.Request) {
+	database.DbClient.GetData()
 	vars := mux.Vars(r)
 	key := vars["id"]
 	uintKey, _ := strconv.ParseUint(key, 10, 32)
@@ -73,20 +77,20 @@ func postTransaction(w http.ResponseWriter, r *http.Request) {
 	models.Transactions = append(models.Transactions, newTransaction)
 
 	json.NewEncoder(w).Encode(newTransaction)
+	database.DbClient.PushData(newTransaction)
 }
 
 func deleteTransaction(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	key := vars["id"]
 	uintKey, _ := strconv.ParseUint(key, 10, 32)
-	fmt.Println(uintKey, key, vars)
-	for index, transaction := range models.Transactions {
-		if transaction.TransactionId == uint32(uintKey) {
-			models.Transactions = append(models.Transactions[:index], models.Transactions[index+1:]...)
-			fmt.Fprintf(w, "Successfully deleted Transaction id no: %s\n", key)
-			json.NewEncoder(w).Encode(transaction)
-			break
-		}
+	err := database.DbClient.DeleteData(uintKey)
+	if err == nil {
+		log.Print("Successfully deleted if exists transaction id = " + key)
+		fmt.Fprintf(w, "Successfully deleted if exists transaction id = "+key)
+	} else {
+		log.Print("Error occured while deleteing, Error=" + err.Error())
+		fmt.Fprintf(w, "Error occured while deleteing, Error="+err.Error())
 	}
 }
 
@@ -182,15 +186,21 @@ func handleRequests() {
 }
 
 func main() {
-	var AccountId uint32 = 450012
-	var AccountIdB uint32 = 450015
-	models.Transactions = []models.Transaction{
-		{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountId, TransactionType: models.DebitCard, PurchaseType: models.Ecommerce, Amount: float32(32.55)},
-		{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountIdB, TransactionType: models.CreditCard, PurchaseType: models.Grocery, Amount: float32(178.20)},
-		{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountId, TransactionType: models.Cash, PurchaseType: models.Grocery, Amount: float32(6000.00)},
-		{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountIdB, TransactionType: models.CreditCard, PurchaseType: models.Fitness, Amount: float32(5663.00)},
-		{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountId, TransactionType: models.MobileApplication, PurchaseType: models.Investment, Amount: float32(2345.00)},
-		{TimeStamp: time.Now().UTC(), IsCredit: models.Credit, TransactionId: rand.Uint32(), AccountId: AccountId, TransactionType: models.Cash, PurchaseType: models.None, Amount: float32(10000.00)},
-	}
+	//var AccountId uint32 = 450012
+	//var AccountIdB uint32 = 450015
+	//Transactions := []models.Transaction{
+	//	{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountId, TransactionType: models.DebitCard, PurchaseType: models.Ecommerce, Amount: float32(32.55)},
+	//	{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountIdB, TransactionType: models.CreditCard, PurchaseType: models.Grocery, Amount: float32(178.20)},
+	//	{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountId, TransactionType: models.Cash, PurchaseType: models.Grocery, Amount: float32(6000.00)},
+	//	{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountIdB, TransactionType: models.CreditCard, PurchaseType: models.Fitness, Amount: float32(5663.00)},
+	//	{TimeStamp: time.Now().UTC(), IsCredit: models.Debit, TransactionId: rand.Uint32(), AccountId: AccountId, TransactionType: models.MobileApplication, PurchaseType: models.Investment, Amount: float32(2345.00)},
+	//	{TimeStamp: time.Now().UTC(), IsCredit: models.Credit, TransactionId: rand.Uint32(), AccountId: AccountId, TransactionType: models.Cash, PurchaseType: models.None, Amount: float32(10000.00)},
+	//}
+	database.DbClient.Connect()
 	handleRequests()
+	//x := database.DbConn{}
+	//x.Connect()
+	//x.GetData()
+	//x.PushData(Transactions[2])
+	//x.GetData()
 }
