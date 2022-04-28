@@ -37,7 +37,6 @@ func (x *DbConn) GetData() {
 	if err != nil {
 		println(err)
 	}
-	fmt.Println(models.Transactions)
 	models.Transactions = nil
 
 	for cursor.Next(context.TODO()) {
@@ -50,7 +49,6 @@ func (x *DbConn) GetData() {
 		elem.TransactionId = uint32(k.Map()["_id"].(int64))
 		models.Transactions = append(models.Transactions, *elem)
 	}
-	fmt.Println(models.Transactions)
 }
 
 func (x *DbConn) PushData(transaction models.Transaction) error {
@@ -70,6 +68,15 @@ func (x *DbConn) PushData(transaction models.Transaction) error {
 func (x *DbConn) DeleteData(tranId uint64) error {
 	_, err := x.dataObj.DeleteOne(context.TODO(), bson.D{{"_id", tranId}})
 
+	return err
+}
+
+func (x *DbConn) UpdateData(tranId uint64, transaction models.Transaction) error {
+	_, err := x.dataObj.DeleteOne(context.TODO(), bson.D{{"_id", tranId}})
+	if err != nil {
+		return err
+	}
+	err = x.PushData(transaction)
 	return err
 }
 

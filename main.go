@@ -21,7 +21,7 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 
 func returnAllTransactions(w http.ResponseWriter, r *http.Request) {
 	database.DbClient.GetData()
-	fmt.Println("Endpoint Hit: returnAllTransactions")
+	log.Print("Returned all Transactions")
 	json.NewEncoder(w).Encode(models.Transactions)
 }
 
@@ -30,12 +30,15 @@ func returnParticularTransaction(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	key := vars["id"]
 	uintKey, _ := strconv.ParseUint(key, 10, 32)
-	fmt.Println(uintKey, key, vars)
 	for _, transaction := range models.Transactions {
 		if transaction.TransactionId == uint32(uintKey) {
+			log.Print("Successfully found the transaction with id", uintKey)
 			json.NewEncoder(w).Encode(transaction)
+			return
 		}
 	}
+	http.Error(w, "Transaction does not exist", http.StatusOK)
+	log.Print("Unable to find transaction with id", uintKey)
 }
 
 func returnTransactionsOfParticularAccount(w http.ResponseWriter, r *http.Request) {
@@ -43,12 +46,13 @@ func returnTransactionsOfParticularAccount(w http.ResponseWriter, r *http.Reques
 	vars := mux.Vars(r)
 	key := vars["id"]
 	uintKey, _ := strconv.ParseUint(key, 10, 32)
-	fmt.Println(uintKey, key, vars)
+	var satisfyingTransactions []models.Transaction
 	for _, transaction := range models.Transactions {
 		if transaction.AccountId == uint32(uintKey) {
-			json.NewEncoder(w).Encode(transaction)
+			satisfyingTransactions = append(satisfyingTransactions, transaction)
 		}
 	}
+	json.NewEncoder(w).Encode(satisfyingTransactions)
 }
 
 func postTransaction(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +67,7 @@ func postTransaction(w http.ResponseWriter, r *http.Request) {
 	var newTransaction models.Transaction
 	json.Unmarshal(reqBody, &newTransaction)
 
+	rand.Seed(time.Now().UTC().UnixNano())
 	newTransaction.TimeStamp = time.Now().UTC()
 	newTransaction.TransactionId = rand.Uint32()
 
@@ -76,8 +81,15 @@ func postTransaction(w http.ResponseWriter, r *http.Request) {
 
 	models.Transactions = append(models.Transactions, newTransaction)
 
-	json.NewEncoder(w).Encode(newTransaction)
-	database.DbClient.PushData(newTransaction)
+	err := database.DbClient.PushData(newTransaction)
+	if err == nil {
+		log.Print("Successfully pushed new Transaction. Transaction = ", newTransaction)
+		fmt.Fprintf(w, "Successfully pushed new Trasaction. Trasaction = ")
+		json.NewEncoder(w).Encode(newTransaction)
+	} else {
+		log.Print("Error occured while Pushing, Error=" + err.Error())
+		http.Error(w, "Error occured while Pushing, Error="+err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func deleteTransaction(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +102,7 @@ func deleteTransaction(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Successfully deleted if exists transaction id = "+key)
 	} else {
 		log.Print("Error occured while deleteing, Error=" + err.Error())
-		fmt.Fprintf(w, "Error occured while deleteing, Error="+err.Error())
+		http.Error(w, "Error occured while deleteing, Error="+err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -110,8 +122,17 @@ func putTransaction(w http.ResponseWriter, r *http.Request) {
 
 	var newTransaction models.Transaction
 	json.Unmarshal(reqBody, &newTransaction)
+	database.DbClient.GetData()
 
-	for idx, transaction := range models.Transactions {
+	if columnPresent["purchaseType"] && !newTransaction.PurchaseType.IsValidPurchaseString() {
+		http.Error(w, "Invalid Purchase Type, please mention a correct purchase string", http.StatusBadRequest)
+		return
+	}
+	if columnPresent["transactionType"] && !newTransaction.TransactionType.IsValidTransactionString() {
+		http.Error(w, "Invalid Transaction Type, Please mention correct transaction string", http.StatusBadRequest)
+		return
+	}
+	for _, transaction := range models.Transactions {
 		if transaction.TransactionId == uint32(uintKey) {
 			if columnPresent["isCredit"] {
 				transaction.IsCredit = newTransaction.IsCredit
@@ -128,14 +149,25 @@ func putTransaction(w http.ResponseWriter, r *http.Request) {
 			if columnPresent["amount"] {
 				transaction.Amount = newTransaction.Amount
 			}
-			json.NewEncoder(w).Encode(transaction)
-			models.Transactions[idx] = transaction
-			break
+
+			err := database.DbClient.UpdateData(uintKey, transaction)
+			if err == nil {
+				log.Print("Successfully modified transaction to", transaction)
+				fmt.Fprintf(w, "Successfuly modified transaction to=")
+				json.NewEncoder(w).Encode(transaction)
+			} else {
+				http.Error(w, "Error occured with DB error="+err.Error(), http.StatusInternalServerError)
+				log.Print("Error occured with DB error=" + err.Error())
+
+			}
+			return
 		}
 	}
+	http.Error(w, "[WARNING] No change, Unable to find the transaction with ID="+key, http.StatusOK)
 }
 
 func returnTransactionAnalysisOfAnAccount(w http.ResponseWriter, r *http.Request) {
+	database.DbClient.GetData()
 	vars := mux.Vars(r)
 	key := vars["id"]
 	uintKey, _ := strconv.ParseUint(key, 10, 32)
